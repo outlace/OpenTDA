@@ -1,2 +1,2 @@
 # OpenTDA
-Open source python library for topological data analysis (TDA)
+Open source Python library for topological data analysis (TDA)
