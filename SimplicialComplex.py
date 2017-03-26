@@ -39,7 +39,7 @@ def rips(nodes, edges, k):
 
 def drawComplex(origData, ripsComplex, axes=[-6,8,-6,6]):
   plt.clf()
-  plt.axis([-6,8,-6,6])
+  plt.axis(axes) #axes = [x1, x2, y1, y2]
   plt.scatter(origData[:,0],origData[:,1]) #plotting just for clarity
   for i, txt in enumerate(origData):
       plt.annotate(i, (origData[i][0]+0.05, origData[i][1])) #add labels
@@ -51,7 +51,7 @@ def drawComplex(origData, ripsComplex, axes=[-6,8,-6,6]):
       #plt.gca().add_line(plt.Line2D(pt1,pt2))
       line = plt.Polygon([pt1,pt2], closed=None, fill=None, edgecolor='r')
       plt.gca().add_line(line)
-      
+
   #add triangles
   for triangle in [t for t in ripsComplex if len(t)==3]:
       pt1,pt2,pt3 = [origData[pt] for pt in [n for n in triangle]]
