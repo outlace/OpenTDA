@@ -8,7 +8,6 @@ from scipy.spatial.distance import squareform, pdist
 from .snf import low
 
 
-# Build neighorbood graph
 def buildGraph(data, epsilon=1., metric='euclidean', p=2):
     D = squareform(pdist(data, metric=metric, p=p))
     D[D >= epsilon] = 0.
@@ -18,7 +17,6 @@ def buildGraph(data, epsilon=1., metric='euclidean', p=2):
     return G.nodes(), edges, weights
 
 
-# lowest neighbors based on arbitrary ordering of simplices
 def lower_nbrs(nodeSet, edgeSet, node):
     return {x for x in nodeSet if {x, node} in edgeSet and node > x}
 
@@ -38,7 +36,6 @@ def rips(nodes, edges, k):
     return VRcomplex
 
 
-# k is the maximal dimension we want to compute (minimum is 1, edges)
 def ripsFiltration(graph, k):
     nodes, edges, weights = graph
     VRcomplex = [{n} for n in nodes]
@@ -63,9 +60,7 @@ def ripsFiltration(graph, k):
     return sortComplex(VRcomplex, filter_values)
 
 
-# filter value is the maximum weight of an edge in the simplex
 def getFilterValue(simplex, edges, weights):
-    # get set of 1-simplices in the simplex
     oneSimplices = list(itertools.combinations(simplex, 2))
     max_weight = 0
     for oneSimplex in oneSimplices:
@@ -76,11 +71,8 @@ def getFilterValue(simplex, edges, weights):
 
 
 def compare(item1, item2):
-    # comparison function that will provide the basis for our total order on the simpices
-    # each item represents a simplex, bundled as a list [simplex, filter
-    # value] e.g. [{0,1}, 4]
     if len(item1[0]) == len(item2[0]):
-        if item1[1] == item2[1]:  # if both items have same filter value
+        if item1[1] == item2[1]:
             if sum(item1[0]) > sum(item2[0]):
                 return 1
             else:
@@ -97,21 +89,14 @@ def compare(item1, item2):
             return -1
 
 
-# need simplices in filtration have a total order
 def sortComplex(filterComplex, filterValues):
-    # sort simplices in filtration by filter values
     pairedList = zip(filterComplex, filterValues)
-    # since I'm using Python 3.5+, no longer supports custom compare, need
-    # conversion helper function..its ok
     sortedComplex = sorted(pairedList, key=functools.cmp_to_key(compare))
     sortedComplex = [list(t) for t in zip(*sortedComplex)]
-    # then sort >= 1 simplices in each chain group by the arbitrary total
-    # order on the vertices
-    # orderValues = [x for x in range(len(filterComplex))]
+
     return sortedComplex
 
 
-# return the n-simplices and weights in a complex
 def nSimplices(n, filterComplex):
     nchain = []
     nfilters = []
@@ -125,23 +110,20 @@ def nSimplices(n, filterComplex):
     return nchain, nfilters
 
 
-# check if simplex is a face of another simplex
 def checkFace(face, simplex):
     if simplex == 0:
         return 1
-    # if face is a (n-1) subset of simplex
+
     elif (set(face) < set(simplex) and (len(face) == (len(simplex) - 1))):
         return 1
     else:
         return 0
 
 
-# build boundary matrix for dimension n ---> (n-1) = p
 def filterBoundaryMatrix(filterComplex):
     bmatrix = np.zeros(
         (len(filterComplex[0]), len(filterComplex[0])), dtype=np.uint8)
-    # bmatrix[0,:] = 0 #add "zero-th" dimension as first row/column, makes algorithm easier later on
-    # bmatrix[:,0] = 0
+
     i = 0
     for colSimplex in filterComplex[0]:
         j = 0
@@ -173,13 +155,11 @@ def readIntervals(reduced_matrix, filterValues):
 
 
 def readPersistence(intervals, filterComplex):
-    # this converts intervals into epsilon format and figures out which
-    # homology group each interval belongs to
     persistence = []
     for interval in intervals:
         start = interval[0]
         end = interval[1]
-        # filterComplex is a list of lists [complex, filter values]
+
         homology_group = (len(filterComplex[0][start]) - 1)
         epsilon_start = filterComplex[1][start]
         epsilon_end = filterComplex[1][end]
