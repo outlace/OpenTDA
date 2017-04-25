@@ -1,3 +1,5 @@
+# Author: Carlos Xavier Hernandez <cxh@stanford.edu>
+
 import numpy as np
 cimport numpy as np
 
