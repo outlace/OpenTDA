@@ -5,7 +5,9 @@ import numpy as np
 import networkx as nx
 from scipy.spatial.distance import squareform, pdist
 
-from .snf import low
+from .snf import low, smith_normal_form
+
+__all__ = ['PersistentHomology']
 
 
 def buildGraph(data, epsilon=1., metric='euclidean', p=2):
@@ -40,7 +42,8 @@ def ripsFiltration(graph, k):
     nodes, edges, weights = graph
     VRcomplex = [{n} for n in nodes]
     filter_values = [0 for j in VRcomplex]  # vertices have filter value of 0
-    for i in range(len(edges)):  # add 1-simplices (edges) and associated filter values
+    # add 1-simplices (edges) and associated filter values
+    for i in range(len(edges)):
         VRcomplex.append(edges[i])
         filter_values.append(weights[i])
     if k > 1:
@@ -136,9 +139,9 @@ def filterBoundaryMatrix(filterComplex):
 
 def readIntervals(reduced_matrix, filterValues):
     intervals = []
-    m = reduced_matrix[0].shape[1]
+    m = reduced_matrix.shape[1]
     for j in range(m):
-        low_j = low(j, reduced_matrix[0])
+        low_j = low(j, reduced_matrix)
         if low_j == (m - 1):
             interval_start = [j, -1]
             intervals.append(interval_start)
@@ -166,3 +169,27 @@ def readPersistence(intervals, filterComplex):
         persistence.append([homology_group, [epsilon_start, epsilon_end]])
 
     return persistence
+
+
+class PersistentHomology(object):
+
+    def __init__(self, epsilon=1., k=3):
+        self.epsilon = epsilon
+        self.k = k
+
+    def fit(self, X):
+        self.graph = buildGraph(X, epsilon=self.epsilon)
+        self.ripsComplex = ripsFiltration(self.graph, k=self.k)
+        self.boundary_matrix = filterBoundaryMatrix(self.ripsComplex)
+        self.reduced_boundary_matrix = smith_normal_form(self.boundary_matrix)
+        return self
+
+    def transform(self, X):
+        intervals = readIntervals(self.reduced_boundary_matrix,
+                                  self.ripsComplex[1])
+        persistence = readPersistence(intervals, self.ripsComplex)
+        return persistence
+
+    def fit_transform(self, X):
+        self.fit(X)
+        return self.transform(X)
