@@ -1,5 +1,4 @@
 import numpy as np
-import scipy
 from numpy.linalg import svd
 
 
@@ -23,11 +22,11 @@ def reduce_matrix(A, eps=None):
     null_mask = (s <= eps)
 
     rank = sum(~null_mask)
-    null_space = scipy.compress(null_mask, v, axis=0)
+    null_space = v[null_mask]
 
     u = u[~null_mask][:, ~null_mask]
     s = np.diag(s[~null_mask])
-    v = v[~null_mask][:, ~null_mask]
+    v = v[~null_mask]
     reduced = u.dot(s.dot(v))
 
     return reduced, rank, null_space

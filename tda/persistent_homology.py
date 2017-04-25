@@ -1,43 +1,43 @@
-import numpy as np
 import itertools
 import functools
+
+import numpy as np
+import networkx as nx
+from scipy.spatial.distance import squareform, pdist
+
 import matplotlib.pyplot as plt
 
+from .snf import low
 
-# this is the default metric we use but you can use whatever distance
-# function you want
-def euclidianDist(a, b):
-    return np.linalg.norm(a - b)  # euclidian distance metric
 
 # Build neighorbood graph
-
-
-def buildGraph(raw_data, epsilon=3.1, metric=euclidianDist):  # raw_data is a numpy array
-    # initialize node set, reference indices from original data array
-    nodes = [x for x in range(raw_data.shape[0])]
-    edges = []  # initialize empty edge array
-    # initialize weight array, stores the weight (which in this case is the
-    # distance) for each edge
-    weights = []
-    for i in range(raw_data.shape[0]):  # iterate through each data point
-        # inner loop to calculate pairwise point distances
-        for j in range(raw_data.shape[0] - i):
-            a = raw_data[i]
-            # each simplex is a set (no order), hence [0,1] = [1,0]; so only
-            # store one
-            b = raw_data[j + i]
-            if (i != j + i):
-                dist = metric(a, b)
-                if dist <= epsilon:
-                    # add edge if distance between points is < epsilon
-                    edges.append({i, j + i})
-                    weights.append(dist)
-    return nodes, edges, weights
+def buildGraph(data, epsilon=1., metric='euclidean', p=2):
+    D = squareform(pdist(data, metric=metric, p=p))
+    D[D >= epsilon] = 0.
+    G = nx.Graph(D)
+    edges = list(map(set, G.edges()))
+    weights = [G.get_edge_data(u, v)['weight'] for u, v in G.edges()]
+    return G.nodes(), edges, weights
 
 
 # lowest neighbors based on arbitrary ordering of simplices
 def lower_nbrs(nodeSet, edgeSet, node):
     return {x for x in nodeSet if {x, node} in edgeSet and node > x}
+
+
+def rips(nodes, edges, k):
+    VRcomplex = [{n} for n in nodes]
+    for e in edges:  # add 1-simplices (edges)
+        VRcomplex.append(e)
+    for i in range(k):
+        # skip 0-simplices
+        for simplex in [x for x in VRcomplex if len(x) == i + 2]:
+            # for each u in simplex
+            nbrs = set.intersection(
+                *[lower_nbrs(nodes, edges, z) for z in simplex])
+            for nbr in nbrs:
+                VRcomplex.append(set.union(simplex, {nbr}))
+    return VRcomplex
 
 
 # k is the maximal dimension we want to compute (minimum is 1, edges)
@@ -109,12 +109,11 @@ def sortComplex(filterComplex, filterValues):
     sortedComplex = [list(t) for t in zip(*sortedComplex)]
     # then sort >= 1 simplices in each chain group by the arbitrary total
     # order on the vertices
-    orderValues = [x for x in range(len(filterComplex))]
+    # orderValues = [x for x in range(len(filterComplex))]
     return sortedComplex
 
+
 # return the n-simplices and weights in a complex
-
-
 def nSimplices(n, filterComplex):
     nchain = []
     nfilters = []
@@ -127,9 +126,8 @@ def nSimplices(n, filterComplex):
         nchain = [0]
     return nchain, nfilters
 
+
 # check if simplex is a face of another simplex
-
-
 def checkFace(face, simplex):
     if simplex == 0:
         return 1
@@ -139,14 +137,13 @@ def checkFace(face, simplex):
     else:
         return 0
 
+
 # build boundary matrix for dimension n ---> (n-1) = p
-
-
 def filterBoundaryMatrix(filterComplex):
     bmatrix = np.zeros(
-        (len(filterComplex[0]), len(filterComplex[0])), dtype='>i8')
+        (len(filterComplex[0]), len(filterComplex[0])), dtype=np.uint8)
     # bmatrix[0,:] = 0 #add "zero-th" dimension as first row/column, makes algorithm easier later on
-    #bmatrix[:,0] = 0
+    # bmatrix[:,0] = 0
     i = 0
     for colSimplex in filterComplex[0]:
         j = 0
@@ -156,82 +153,19 @@ def filterBoundaryMatrix(filterComplex):
         i += 1
     return bmatrix
 
-# returns row index of lowest "1" in a column i in the boundary matrix
 
-
-def low(i, matrix):
-    col = matrix[:, i]
-    col_len = len(col)
-    # loop through column from bottom until you find the first 1
-    for i in range((col_len - 1), -1, -1):
-        if col[i] == 1:
-            return i
-    # if no lowest 1 (e.g. column of all zeros), return -1 to be 'undefined'
-    return -1
-
-# checks if the boundary matrix is fully reduced
-
-
-def isReduced(matrix):
-    for j in range(matrix.shape[1]):  # iterate through columns
-        for i in range(j):  # iterate through columns before column j
-            low_j = low(j, matrix)
-            low_i = low(i, matrix)
-            if (low_j == low_i and low_j != -1):
-                return i, j  # return column i to add to column j
-    return [0, 0]
-
-# the main function to iteratively reduce the boundary matrix
-
-
-def reduceBoundaryMatrix(matrix):
-    # this refers to column index in the boundary matrix
-    reduced_matrix = matrix.copy()
-    matrix_shape = reduced_matrix.shape
-    # this matrix will store the column additions we make
-    memory = np.identity(matrix_shape[1], dtype='>i8')
-    r = isReduced(reduced_matrix)
-    while (r != [0, 0]):
-        i = r[0]
-        j = r[1]
-        col_j = reduced_matrix[:, j]
-        col_i = reduced_matrix[:, i]
-        # print("Mod: add col %s to %s \n" % (i+1,j+1)) #Uncomment to see what
-        # mods are made
-        reduced_matrix[:, j] = np.bitwise_xor(
-            col_i, col_j)  # add column i to j
-        memory[i, j] = 1
-        r = isReduced(reduced_matrix)
-    return reduced_matrix, memory
-
-
-# reduced_matrix includes the reduced boundary matrix AND the memory matrix
 def readIntervals(reduced_matrix, filterValues):
-    # store intervals as a list of 2-element lists, e.g. [2,4] = start at "time" point 2, end at "time" point 4
-    # note the "time" points are actually just the simplex index number for
-    # now. we will convert to epsilon value later
     intervals = []
-    # loop through each column j
-    # if low(j) = -1 (undefined, all zeros) then j signifies the birth of a new feature j
-    # if low(j) = i (defined), then j signifies the death of feature i
-    # for each column (its a square matrix so doesn't matter...)
-    for j in range(reduced_matrix[0].shape[1]):
+    m = reduced_matrix[0].shape[1]
+    for j in range(m):
         low_j = low(j, reduced_matrix[0])
-        if low_j == -1:
+        if low_j == (m - 1):
             interval_start = [j, -1]
-            # -1 is a temporary placeholder until we update with death time
             intervals.append(interval_start)
-            # if no death time, then -1 signifies feature has no end (start -> infinity)
-            #-1 turns out to be very useful because in python if we access the list x[-1] then that will return the
-            # last element in that list. in effect if we leave the end point of an interval to be -1
-            # then we're saying the feature lasts until the very end
-        else:  # death of feature
-            # find the feature [start,end] so we can update the end point
+
+        else:
             feature = intervals.index([low_j, -1])
-            intervals[feature][1] = j  # j is the death point
-            # if the interval start point and end point are the same, then this feature begins and dies instantly
-            # so it is a useless interval and we dont want to waste memory
-            # keeping it
+            intervals[feature][1] = j
             epsilon_start = filterValues[intervals[feature][0]]
             epsilon_end = filterValues[j]
             if epsilon_start == epsilon_end:
@@ -268,4 +202,28 @@ def graph_barcode(persistence, homology_group=0):
     ax.yaxis.set_major_formatter(plt.NullFormatter())
     plt.xlabel('epsilon')
     plt.ylabel("Betti dim %s" % (homology_group,))
+    plt.show()
+
+
+def drawComplex(origData, ripsComplex, axes=[-6, 8, -6, 6]):
+    plt.clf()
+    plt.axis(axes)  # axes = [x1, x2, y1, y2]
+    plt.scatter(origData[:, 0], origData[:, 1])  # plotting just for clarity
+    for i, txt in enumerate(origData):
+        plt.annotate(i, (origData[i][0] + 0.05, origData[i][1]))  # add labels
+
+    # add lines for edges
+    for edge in [e for e in ripsComplex if len(e) == 2]:
+        # print(edge)
+        pt1, pt2 = [origData[pt] for pt in [n for n in edge]]
+        # plt.gca().add_line(plt.Line2D(pt1,pt2))
+        line = plt.Polygon([pt1, pt2], closed=None, fill=None, edgecolor='r')
+        plt.gca().add_line(line)
+
+    # add triangles
+    for triangle in [t for t in ripsComplex if len(t) == 3]:
+        pt1, pt2, pt3 = [origData[pt] for pt in [n for n in triangle]]
+        line = plt.Polygon([pt1, pt2, pt3], closed=False,
+                           color="blue", alpha=0.3, fill=True, edgecolor=None)
+        plt.gca().add_line(line)
     plt.show()

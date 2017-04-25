@@ -1,6 +1,20 @@
 """OpenTDA: Open-source Python library for topological data analysis"""
-from setuptools import setup, find_packages
+import sys
+import numpy as np
+from os.path import join as pjoin
+from setuptools import setup, Extension, find_packages
 from tda import __name__, __version__
+
+try:
+    import Cython
+    from Cython.Distutils import build_ext
+
+    if Cython.__version__ < '0.18':
+        raise ImportError()
+except ImportError:
+    print(
+        'Cython version 0.18 or later is required. Try "conda install cython"')
+    sys.exit(1)
 
 NAME = __name__
 VERSION = __version__
@@ -20,6 +34,13 @@ def readlist(filename):
     return list(rows)
 
 
+extensions = []
+extensions.append(
+    Extension('tda.snf',
+              sources=[pjoin('tda', 'snf.pyx')],
+              include_dirs=[np.get_include()]))
+
+
 setup(
     name=NAME,
     version=VERSION,
@@ -31,9 +52,9 @@ setup(
     license='ALv2',
     packages=find_packages(),
     package_data={
-        '': ['README.md',
-             'requirements.txt'],
+        '': ['README.md'],
     },
     zip_safe=False,
-    install_requires=readlist('requirements.txt'),
+    ext_modules=extensions,
+    cmdclass={'build_ext': build_ext}
 )
